@@ -16,15 +16,12 @@
 
 package com.google.android.gms.example.bannerexample;
 
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.WindowMetrics;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.PopupMenu;
 import android.widget.Toast;
@@ -53,6 +50,9 @@ public class MyActivity extends AppCompatActivity {
   private final AtomicBoolean isMobileAdsInitializeCalled = new AtomicBoolean(false);
   private GoogleMobileAdsConsentManager googleMobileAdsConsentManager;
   private AdView adView;
+  // [START set_ad_size]
+  private AdSize adSize;
+  // [END set_ad_size]
   private FrameLayout adContainerView;
 
   @Override
@@ -85,6 +85,35 @@ public class MyActivity extends AppCompatActivity {
             invalidateOptionsMenu();
           }
         });
+
+    // [START get_ad_size]
+    // Wait for the layout to be completed before calculating the ad size.
+    adContainerView
+        .getViewTreeObserver()
+        .addOnGlobalLayoutListener(
+            new ViewTreeObserver.OnGlobalLayoutListener() {
+              @Override
+              public void onGlobalLayout() {
+                // Remove the listener after the layout has been calculated.
+                adContainerView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+
+                // Calculate the ad size based on the ad view container width.
+                int adWidthPixels = adContainerView.getWidth();
+                float density = getResources().getDisplayMetrics().density;
+                int adWidth = (int) (adWidthPixels / density);
+                adSize =
+                    AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+                        MyActivity.this, adWidth);
+
+                // Load the banner ad with the calculated ad size.
+                // [START_EXCLUDE silent]
+                if (googleMobileAdsConsentManager.canRequestAds()) {
+                  loadBanner();
+                }
+                // [END_EXCLUDE]
+              }
+            });
+    // [END get_ad_size]
 
     // This sample attempts to load ads using consent obtained in the previous session.
     if (googleMobileAdsConsentManager.canRequestAds()) {
@@ -168,7 +197,7 @@ public class MyActivity extends AppCompatActivity {
     // Create a new ad view.
     adView = new AdView(this);
     adView.setAdUnitId(AD_UNIT_ID);
-    adView.setAdSize(getAdSize());
+    adView.setAdSize(adSize);
 
     // Replace ad container with new ad view.
     adContainerView.removeAllViews();
@@ -199,25 +228,10 @@ public class MyActivity extends AppCompatActivity {
               MobileAds.initialize(this, initializationStatus -> {});
 
               // Load an ad on the main thread.
-              runOnUiThread(this::loadBanner);
+              if (adSize != null) {
+                runOnUiThread(this::loadBanner);
+              }
             })
         .start();
   }
-
-  // [START get_ad_size]
-  // Get the ad size with screen width.
-  public AdSize getAdSize() {
-    DisplayMetrics displayMetrics = getResources().getDisplayMetrics();
-    int adWidthPixels = displayMetrics.widthPixels;
-
-    if (VERSION.SDK_INT >= VERSION_CODES.R) {
-      WindowMetrics windowMetrics = this.getWindowManager().getCurrentWindowMetrics();
-      adWidthPixels = windowMetrics.getBounds().width();
-    }
-
-    float density = displayMetrics.density;
-    int adWidth = (int) (adWidthPixels / density);
-    return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth);
-  }
-  // [END get_ad_size]
 }

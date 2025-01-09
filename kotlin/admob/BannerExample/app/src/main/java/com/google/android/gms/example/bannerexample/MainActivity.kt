@@ -16,13 +16,12 @@
 
 package com.google.android.gms.example.bannerexample
 
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.WindowMetrics
+import android.view.ViewTreeObserver
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -44,25 +43,10 @@ class MainActivity : AppCompatActivity() {
   private var adView: AdView? = null
   private lateinit var binding: ActivityMainBinding
   private lateinit var googleMobileAdsConsentManager: GoogleMobileAdsConsentManager
+  // [START set_ad_size]
+  private lateinit var adSize: AdSize
 
-  // [START get_ad_size]
-  // Get the ad size with screen width.
-  private val adSize: AdSize
-    get() {
-      val displayMetrics = resources.displayMetrics
-      val adWidthPixels =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-          val windowMetrics: WindowMetrics = this.windowManager.currentWindowMetrics
-          windowMetrics.bounds.width()
-        } else {
-          displayMetrics.widthPixels
-        }
-      val density = displayMetrics.density
-      val adWidth = (adWidthPixels / density).toInt()
-      return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth)
-    }
-
-  // [END get_ad_size]
+  // [END set_ad_size]
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -89,11 +73,36 @@ class MainActivity : AppCompatActivity() {
       }
     }
 
+    // [START get_ad_size]
+    // Wait for the layout to be completed before calculating the ad size.
+    binding.adViewContainer.viewTreeObserver.addOnGlobalLayoutListener(
+      object : ViewTreeObserver.OnGlobalLayoutListener {
+        override fun onGlobalLayout() {
+          // Remove the listener after the layout has been calculated.
+          binding.adViewContainer.viewTreeObserver.removeOnGlobalLayoutListener(this)
+
+          // Calculate the ad size based on the ad view container width.
+          val adWidthPixels = binding.adViewContainer.width
+          val density = resources.displayMetrics.density
+          val adWidth = (adWidthPixels / density).toInt()
+          adSize =
+            AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this@MainActivity, adWidth)
+
+          // Load the banner ad with the calculated ad size.
+          // [START_EXCLUDE silent]
+          if (googleMobileAdsConsentManager.canRequestAds) {
+            loadBanner()
+          }
+          // [END_EXCLUDE]
+        }
+      }
+    )
+    // [END get_ad_size]
+
     // This sample attempts to load ads using consent obtained in the previous session.
     if (googleMobileAdsConsentManager.canRequestAds) {
       initializeMobileAdsSdk()
     }
-    // [END can_request_ads]
   }
 
   /** Called when leaving the activity. */
@@ -189,7 +198,9 @@ class MainActivity : AppCompatActivity() {
 
       runOnUiThread {
         // Load an ad on the main thread.
-        loadBanner()
+        if (::adSize.isInitialized) {
+          loadBanner()
+        }
       }
     }
   }
